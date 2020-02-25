@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "future": "cpp",
+        "thread": "cpp",
+        "memory": "cpp",
+        "limits": "cpp",
+        "streambuf": "cpp",
+        "typeinfo": "cpp"
+    }
+}
