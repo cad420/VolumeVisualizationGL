@@ -1,16 +1,25 @@
 #version 430 core
 in vec3 texCoord;
-out vec4 entryPos;
-out vec4 exitPos;
 
-uniform vec3 viewPos;
-uniform mat4 vpl_ModelMatrix;
+// Multi Render Targets
+layout(location = 0) out vec4 entryPos; 
+layout(location = 1) out vec4 exitPos;
 
+layout(location = 1) uniform mat4 ModelMatrix;
+layout(location = 2) uniform vec3 viewPos;
+
+
+/*
+* State configuration:
+* 1.Enable blending
+* 2.Set blend function as srcRGB *(1), dstRBG(1), srcAlpha(1), dstAlpha(1)
+* 3.Set the polygon front face according to your vertex orderer.
+*/
 //out vec4 fragColor;
 void main() 
 {
-	vec3 maxPoint = vec3(vpl_ModelMatrix*vec4(1));
-	vec3 minPoint = vec3(vpl_ModelMatrix*vec4(0,0,0,1));
+	vec3 maxPoint = vec3(ModelMatrix*vec4(1));
+	vec3 minPoint = vec3(ModelMatrix*vec4(0,0,0,1));
 
 	bool inner = false;
 	vec3 eyePos = viewPos;
