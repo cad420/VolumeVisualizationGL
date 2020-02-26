@@ -24,8 +24,9 @@ class GLFWImpl:public EventListenerTraits
             return false;
         }
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 4);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        glfwWindowHint(GLFW_DOUBLEBUFFER,true);
 
         auto pWin = glfwCreateWindow(1024,768,"GLContext",nullptr,nullptr);
         if(pWin == nullptr){

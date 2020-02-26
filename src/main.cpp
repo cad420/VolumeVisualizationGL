@@ -139,23 +139,24 @@ void glCall_UpdateTransferFunctionTexture(GL::GLTexture & texture,const string &
 	}
 }
 
-void glCall_CameraUniformUpdate(ViewingTransform & camera,Transform & modelMatrix,GL::GLProgram & program){
+void glCall_CameraUniformUpdate(ViewingTransform & camera,Transform & modelMatrix,GL::GLProgram & positionGenerateProgram)
+{
 	// camera
 	const auto mvpTransform = camera.GetPerspectiveMatrix() * camera.GetViewMatrixWrapper().LookAt();
 	const auto viewPos = camera.GetViewMatrixWrapper().GetPosition();
-	assert(program.Valid());
-	GL_EXPR(glProgramUniformMatrix4fv(program,0,1,GL_TRUE,mvpTransform.Matrix().FlatData())); // location = 0 is MVPMatrix
-	GL_EXPR(glProgramUniformMatrix4fv(program,1,1,GL_TRUE,modelMatrix.Matrix().FlatData())); // location = 1 is ModelMatrix
-	GL_EXPR(glProgramUniform3fv(program,2,1,viewPos.ConstData())); // location = 1 is viewPos
-
+	assert(positionGenerateProgram.Valid());
+	GL_EXPR(glProgramUniformMatrix4fv(positionGenerateProgram,0,1,GL_TRUE,mvpTransform.Matrix().FlatData())); // location = 0 is MVPMatrix
+	GL_EXPR(glProgramUniformMatrix4fv(positionGenerateProgram,1,1,GL_TRUE,modelMatrix.Matrix().FlatData())); // location = 1 is ModelMatrix
+	GL_EXPR(glProgramUniform3fv(positionGenerateProgram,2,1,viewPos.ConstData())); // location = 1 is viewPos
 }
+
 GL::GLTexture glCall_RecreateRenderTargetTexture(GL & gl,int width,int height){
 	auto rt = gl.CreateTexture(GL_TEXTURE_2D);
 	GL_EXPR(glTextureStorage2D(rt,1,GL_RGBA32F,width,height));   // allocate storage
-	GL_EXPR(glTextureParameterf(rt,GL_TEXTURE_MIN_FILTER,GL_LINEAR));  // filter type
-	GL_EXPR(glTextureParameterf(rt,GL_TEXTURE_MAG_FILTER,GL_LINEAR));
-	GL_EXPR(glTextureParameterf(rt,GL_TEXTURE_WRAP_R,GL_CLAMP_TO_EDGE)); // boarder style
-	GL_EXPR(glTextureParameterf(rt,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE));
+	//GL_EXPR(glTextureParameterf(rt,GL_TEXTURE_MIN_FILTER,GL_LINEAR));  // filter type
+	//GL_EXPR(glTextureParameterf(rt,GL_TEXTURE_MAG_FILTER,GL_LINEAR));
+	//GL_EXPR(glTextureParameterf(rt,GL_TEXTURE_WRAP_R,GL_CLAMP_TO_EDGE)); // boarder style
+	//GL_EXPR(glTextureParameterf(rt,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE));
 	return rt;
 }
 
@@ -163,19 +164,8 @@ GL::GLTexture glCall_CreateVolumeTexture(GL & gl,int width,int height,int depth)
 {
 	auto t = gl.CreateTexture(GL_TEXTURE_3D);
 	GL_EXPR(glTextureStorage3D(t,1,GL_R8,width,height,depth));
-	GL_EXPR(glTextureParameterf(t,GL_TEXTURE_MIN_FILTER,GL_LINEAR));
-	GL_EXPR(glTextureParameterf(t,GL_TEXTURE_MAG_FILTER,GL_LINEAR));
-	GL_EXPR(glTextureParameterf(t,GL_TEXTURE_WRAP_R,GL_CLAMP_TO_EDGE));
-	GL_EXPR(glTextureParameterf(t,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE));
-	GL_EXPR(glTextureParameterf(t,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE));
 	return t;
 }
-
-void FileDropEvent(int count,const char ** df){
-	println("FileDropEvent");
-
-
-	};
 }
 
 
@@ -312,15 +302,14 @@ int main(int argc,char ** argv)
 	GL_EXPR(glNamedBufferSubData(vbo,0,sizeof(CubeVertices),CubeVertices));
 	GL_EXPR(glNamedBufferSubData(ebo,0,sizeof(CubeVertexIndices),CubeVertexIndices));
 
-
 	GLFramebuffer = gl->CreateFramebuffer();
 	GLEntryPosTexture = glCall_RecreateRenderTargetTexture(*gl,windowSize.x,windowSize.y);
 	GLExitPosTexture = glCall_RecreateRenderTargetTexture(*gl,windowSize.x,windowSize.y);
 	GLResultTexture = glCall_RecreateRenderTargetTexture(*gl,windowSize.x,windowSize.y);
+
 	GL_EXPR(glNamedFramebufferTexture(GLFramebuffer,GL_COLOR_ATTACHMENT0,GLEntryPosTexture,0));
 	GL_EXPR(glNamedFramebufferTexture(GLFramebuffer,GL_COLOR_ATTACHMENT1,GLExitPosTexture,0));
 	GL_EXPR(glNamedFramebufferTexture(GLFramebuffer,GL_COLOR_ATTACHMENT2,GLResultTexture,0));
-
 	// Depth and stencil attachments are not necessary in Ray Casting.
 
 	GL_EXPR(if(glCheckNamedFramebufferStatus(GLFramebuffer,GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE){
@@ -329,29 +318,34 @@ int main(int argc,char ** argv)
 	});
 
 
-	// [2] Initialize vertex shader
+	// [2] bounding box vertex shader
 
 	auto vs = GetTextFromFile("resources/position_v.glsl");
-	const auto pVS = vs.c_str();
+	auto pVS = vs.c_str();
 	auto vShader = glCall_CreateShaderAndCompileHelper(*gl,GL_VERTEX_SHADER,pVS);
 
 	auto fs = GetTextFromFile("resources/position_f.glsl");
-	const auto pFS = fs.c_str();
+	auto pFS = fs.c_str();
 	auto fShader = glCall_CreateShaderAndCompileHelper(*gl,GL_FRAGMENT_SHADER,pFS);
 
 
 	// attach shader to program
-	auto program = gl->CreateProgram();
-	GL_EXPR(glAttachShader(program,vShader));
-	GL_EXPR(glAttachShader(program,fShader));
+	auto positionGenerateProgram = gl->CreateProgram();
+	GL_EXPR(glAttachShader(positionGenerateProgram,vShader));
+	GL_EXPR(glAttachShader(positionGenerateProgram,fShader));
 
 	// Set Fragment output location, the processure must be done before linking the program
-	GL_EXPR(glBindFragDataLocation(program,0,"entryPos"));
-	GL_EXPR(glBindFragDataLocation(program,1,"exitPos"));
+	GL_EXPR(glBindFragDataLocation(positionGenerateProgram,0,"entryPos"));
+	GL_EXPR(glBindFragDataLocation(positionGenerateProgram,1,"exitPos"));
 
-	glCall_LinkProgramAndCheckHelper(program);
-	gl->DeleteGLObject(vShader);
-	gl->DeleteGLObject(fShader);
+	glCall_LinkProgramAndCheckHelper(positionGenerateProgram);
+
+	// Create Transfer function texture
+	GLTFTexture = gl->CreateTexture(GL_TEXTURE_1D);
+	assert(GLTFTexture.Valid());
+	GL_EXPR(glTextureStorage1D(GLTFTexture,1,GL_RGBA32F,256));
+	glCall_UpdateTransferFunctionTexture(GLTFTexture,"",256);
+
 
 
 	// Create render target for ray-casting
@@ -366,13 +360,67 @@ int main(int argc,char ** argv)
 	auto testTexture = glCall_CreateVolumeTexture(*gl,128,128,128);
 	assert(testTexture.Valid());
 	GL_EXPR(glTextureSubImage3D(testTexture,0,0,0,0,128,128,128,GL_RED,GL_UNSIGNED_BYTE,buf.get()));
-	//glTextureSubImage3D(testTexture,0,0,0,0,128,128,128,GL_RED,GL_UNSIGNED_BYTE,buf.get()));
-	// Set program uniforms 
-	glCall_CameraUniformUpdate(camera,ModelTransform,program);
-	
 
-	// Install EventListener
-	GL::MouseEvent = [&camera,&FPSCamera,&program,&ModelTransform](void*,MouseButton buttons,EventAction action,int xpos,int ypos){
+
+    // create ray casting shader
+	vs = GetTextFromFile("resources/screenquad_v.glsl");
+	pVS = vs.c_str();
+	vShader = glCall_CreateShaderAndCompileHelper(*gl,GL_VERTEX_SHADER,pVS);
+
+	fs = GetTextFromFile("resources/naiveraycast_f.glsl");
+	pFS = fs.c_str();
+	fShader = glCall_CreateShaderAndCompileHelper(*gl,GL_FRAGMENT_SHADER,pFS);
+
+	auto raycastingProgram = gl->CreateProgram();
+	GL_EXPR(glAttachShader(raycastingProgram,vShader));
+	GL_EXPR(glAttachShader(raycastingProgram,fShader));
+	glCall_LinkProgramAndCheckHelper(raycastingProgram);
+
+	fs = GetTextFromFile("resources/screenquad_f.glsl");
+	pFS = fs.c_str();
+	fShader = glCall_CreateShaderAndCompileHelper(*gl,GL_FRAGMENT_SHADER,pFS);
+	auto screenQuadProgram = gl->CreateProgram();
+	GL_EXPR(glAttachShader(screenQuadProgram,vShader));
+	GL_EXPR(glAttachShader(screenQuadProgram,fShader));
+	glCall_LinkProgramAndCheckHelper(screenQuadProgram);
+
+	gl->DeleteGLObject(vShader);
+	gl->DeleteGLObject(fShader);
+
+	// binding texture unit : see the raycasting shader for details
+	GL_EXPR(glBindTextureUnit(0,GLTFTexture)); 	            // binds texture unit 0 for tf texture
+	GL_EXPR(glBindTextureUnit(1,testTexture));              // binds texture unit 1 for volume texture
+	//GL_EXPR(glBindTextureUnit(2,GLResultTexture));          // binds texture unit 2 for result texture
+	// binding image unit : see the raycasting shader for details
+	GL_EXPR(glBindImageTexture(0,GLEntryPosTexture,0,GL_FALSE,0,GL_READ_WRITE,GL_RGBA32F)); // binds image unit 0 for entry texture (read and write)
+	GL_EXPR(glBindImageTexture(1,GLExitPosTexture,0,GL_FALSE,0,GL_READ_WRITE,GL_RGBA32F)); // binds image unit 1 for exit texture (read and write)
+	GL_EXPR(glBindImageTexture(2,GLResultTexture,0,GL_FALSE,0,GL_READ_WRITE,GL_RGBA32F));  // binds image unit 2 for result texture (read and write)
+
+	// Uniforms binding for program
+	// [1] position shader
+	glCall_CameraUniformUpdate(camera,ModelTransform,positionGenerateProgram); // camera-related uniforms for position program
+	// [2] ray-casting shader
+	GL::GLSampler sampler = gl->CreateSampler();
+	GL_EXPR(glSamplerParameterf(sampler,GL_TEXTURE_MIN_FILTER,GL_LINEAR));  // filter type
+	GL_EXPR(glSamplerParameterf(sampler,GL_TEXTURE_MAG_FILTER,GL_LINEAR));
+	GL_EXPR(glSamplerParameterf(sampler,GL_TEXTURE_WRAP_R,GL_CLAMP_TO_EDGE)); // boarder style
+	GL_EXPR(glSamplerParameterf(sampler,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE));
+	GL_EXPR(glSamplerParameterf(sampler,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE));
+
+	GL_EXPR(glProgramUniform1i(raycastingProgram,0,0)); // sets location = 0 (tf texture sampler) as tf texture unit 0
+	GL_EXPR(glBindSampler(0,sampler));
+	GL_EXPR(glProgramUniform1i(raycastingProgram,1,1)); // sets location = 1 (volume texture sampler) as volume texture unit 1
+	GL_EXPR(glBindSampler(1,sampler));
+
+	GL_EXPR(glProgramUniform1i(raycastingProgram,2,0)); // sets location = 2 as entry image unit 0
+	GL_EXPR(glProgramUniform1i(raycastingProgram,3,1)); // sets location = 3 as exit image unit 1
+	GL_EXPR(glProgramUniform1i(raycastingProgram,4,2)); // sets location = 4 as result image unit 2
+
+	// [3] screen rendering shader
+	GL_EXPR(glProgramUniform1i(screenQuadProgram,0,2)); // sets location = 0 as result image unit 2
+
+		// Install EventListener
+	GL::MouseEvent = [&camera,&FPSCamera,&positionGenerateProgram,&ModelTransform](void*,MouseButton buttons,EventAction action,int xpos,int ypos){
 			static Vec2i lastMousePos;
 			static bool pressed = false;
 			if(action == Press){
@@ -408,14 +456,14 @@ int main(int argc,char ** argv)
 				lastMousePos.x = xpos;
 				lastMousePos.y = ypos;
 
-				glCall_CameraUniformUpdate(camera,ModelTransform,program);
+				glCall_CameraUniformUpdate(camera,ModelTransform,positionGenerateProgram);
 			}else if(action == Release){
 				pressed = false;
 				println("Release");
 			}
 		};
 
-	GL::KeyboardEvent =[&camera,&FPSCamera,&dataResolution,&program,&ModelTransform](void*,KeyButton key,EventAction action){
+	GL::KeyboardEvent =[&camera,&FPSCamera,&dataResolution,&positionGenerateProgram,&ModelTransform](void*,KeyButton key,EventAction action){
 			float sensity = 0.1;
 			if(action == Press){
 				if ( key == KeyButton::Key_C ) {
@@ -466,7 +514,7 @@ int main(int argc,char ** argv)
 					}
 					if(change == true)
 					{
-						glCall_CameraUniformUpdate(camera,ModelTransform,program);
+						glCall_CameraUniformUpdate(camera,ModelTransform,positionGenerateProgram);
 						//println("camera change");
 						//PrintCamera(camera);
 					}
@@ -476,7 +524,8 @@ int main(int argc,char ** argv)
 	GL::FramebufferResizeEvent = [](void*,int width,int height){};
 	GL::FileDropEvent = [&camera,&GLTFTexture](void*,int count ,const char **df){
 		vector<string> fileNames;
-		for(int i = 0 ;i < count;i++){
+		for(int i = 0 ;i < count;i++)
+		{
 			fileNames.push_back(df[i]);
 		}
 
@@ -497,51 +546,67 @@ int main(int argc,char ** argv)
 			}
 			if ( found )
 				break;
-		}
-	};
+		}};
 
 
 	// configuration rendering pipeline
-	glClearColor(0.35,0.46,0.15,1.0);
-	float zeroRGBA[]={0.f,0.f,0.f,0.f};
-	//glEnable(GL_BLEND); // Blend is necessary for ray-casting position generation
 
-	while(gl->Wait() == false){
+	const float zeroRGBA[]={0.f,0.f,0.f,0.f};
+	GL_EXPR(glBlendFuncSeparate(GL_ONE,GL_ONE,GL_ONE,GL_ONE)); // Just add dst to src : (srcRBG * 1 + dstRGB * 1,srcAlpha * 1 + dstRGB * 1), so the backround color must be cleared as 0
+	GL_EXPR(glFrontFace(GL_CW));
+	const GLenum drawBuffers[2]={GL_COLOR_ATTACHMENT0,GL_COLOR_ATTACHMENT1};
+	const GLenum allDrawBuffers[3]={GL_COLOR_ATTACHMENT0,GL_COLOR_ATTACHMENT1,GL_COLOR_ATTACHMENT2};
 
-		// Pass 1: Generator ray position
-		// clear framebuffer object with entry position and exit position texture
-		GL_EXPR(glClearNamedFramebufferfv(GLFramebuffer,GL_COLOR,0,zeroRGBA)); // EntryPosTexture
-		GL_EXPR(glClearNamedFramebufferfv(GLFramebuffer,GL_COLOR,1,zeroRGBA)); // ExitPosTexture
-		GL_EXPR(glClearNamedFramebufferfv(GLFramebuffer,GL_COLOR,2,zeroRGBA)); // ResultTexture
+	while(gl->Wait() == false){ // application loop
 
-//		GL_EXPR(glBindFramebuffer(GL_FRAMEBUFFER,GLFramebuffer));
+		// Pass 0: Clears render targets
 
-		//GL_EXPR(glClearColor(0,0,0,0));
-		//GL_EXPR(glClear(GL_COLOR_BUFFER_BIT));
 
-		GL_EXPR(glEnable(GL_BLEND));
-		GL_EXPR(glBlendFuncSeparate(GL_ONE,GL_ONE,GL_ONE,GL_ONE)); // Just add dst to src : (srcRBG * 1 + dstRGB * 1,srcAlpha * 1 + dstRGB * 1)
-		GL_EXPR(glFrontFace(GL_CW));
-
-		glUseProgram(program);
+		// Pass 1: Generates ray position into textures
+		
+		glEnable(GL_BLEND); // Blend is necessary for ray-casting position generation
+		GL_EXPR(glUseProgram(positionGenerateProgram));
 		GL_EXPR(glBindFramebuffer(GL_FRAMEBUFFER,GLFramebuffer));
-		GLenum drawBuffers[2]={GL_COLOR_ATTACHMENT0,GL_COLOR_ATTACHMENT1};
+
+		// GL_EXPR(glClearNamedFramebufferfv(GLFramebuffer,GL_COLOR,0,zeroRGBA)); // Clear EntryPosTexture
+		// GL_EXPR(glClearNamedFramebufferfv(GLFramebuffer,GL_COLOR,1,zeroRGBA)); // Clear ExitPosTexture
+		// GL_EXPR(glClearNamedFramebufferfv(GLFramebuffer,GL_COLOR,2,zeroRGBA)); // Clear ResultTexture
+		/**
+		 * @brief Clears framebuffer use the non-DSA api because commented DSA version above has no
+		 * effect on intel GPU.
+		 */
+		glDrawBuffers(3,allDrawBuffers);
+		glClearBufferfv(GL_COLOR,0,zeroRGBA);
+		glClearBufferfv(GL_COLOR,1,zeroRGBA);
+		glClearBufferfv(GL_COLOR,2,zeroRGBA);
+
 		GL_EXPR(glNamedFramebufferDrawBuffers(GLFramebuffer,2,drawBuffers)); // draw into these buffers
-		glDrawElements(GL_TRIANGLES,36,GL_UNSIGNED_INT,nullptr);
+		GL_EXPR(glDrawElements(GL_TRIANGLES,36,GL_UNSIGNED_INT,nullptr)); // 12 triangles, 36 vertices in total
 
-		// Ray-casting here
-
-
-		// Blit
-		GL_EXPR(glNamedFramebufferReadBuffer(GLFramebuffer,GL_COLOR_ATTACHMENT0)); // set the read buffer of the src fbo
-		//GL_EXPR(glNamedFramebufferDrawBuffer(0,GL_COLOR_ATTACHMENT0)); // set the draw buffer of the dst fbo
-		GL_EXPR(glBlitNamedFramebuffer(GLFramebuffer,0,0,0,windowSize.x,windowSize.y,0,0,windowSize.x,windowSize.y,GL_COLOR_BUFFER_BIT,GL_LINEAR));
+		// Pass 2 - n: Ray-casting here
+		glDisable(GL_BLEND);
+		GL_EXPR(glUseProgram(raycastingProgram));
+		GL_EXPR(glNamedFramebufferDrawBuffer(GLFramebuffer,GL_COLOR_ATTACHMENT2)); // draw into result texture
 
 
+		GL_EXPR(glDrawArrays(GL_TRIANGLE_STRIP,0,4)); // vertex is hard coded in shader
 
-		gl->DispatchEvent();
+		//While out-of-core refine
+		// Pass n + 1: Blit result to default framebuffer
+		 GL_EXPR(glBindFramebuffer(GL_FRAMEBUFFER,0));  // prepare to display
+
+	     GL_EXPR(glUseProgram(screenQuadProgram));
+		 GL_EXPR(glDrawArrays(GL_TRIANGLE_STRIP,0,4)); // vertex is hard coded in shader
+		 // You can use the framebuffer blit to display the result texture, but it maybe has a perfermance issue
+		 //GL_EXPR(glNamedFramebufferReadBuffer(GLFramebuffer,GL_COLOR_ATTACHMENT2)); // set the read buffer of the src fbo
+		 //GL_EXPR(glNamedFramebufferDrawBuffer(0,GL_BACK)); // set the draw buffer of the dst fbo
+		 //GL_EXPR(glBlitNamedFramebuffer(GLFramebuffer,0,0,0,windowSize.x,windowSize.y,0,0,windowSize.x,windowSize.y,GL_COLOR_BUFFER_BIT,GL_LINEAR));
+
+		// Final: Display on window and handle events
 		gl->Present();
+		gl->DispatchEvent();
 	}
+
     return 0;
 }
 
