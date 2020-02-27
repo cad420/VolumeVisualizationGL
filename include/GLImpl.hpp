@@ -5,7 +5,9 @@
 #include "GLContext.hpp"
 
 #include <memory>
+#include <vector>
 #include <iostream>
+#include <cstdio>
 
 class GLFWImpl:public EventListenerTraits
 {
@@ -172,7 +174,9 @@ public:
     {
         return glfwWindowShouldClose(window.get());
     }
+    const GLMAXINTEGER & MaxInteger()const{
 
+    }
     void DispatchEvent()
     {
         glfwPollEvents();
@@ -191,10 +195,64 @@ public:
     }
 };
 
+
+
 struct GL3WImpl
 {
+private:
+    static GLMAXINTEGER maxInteger;
+    static std::vector<std::string> extensions;
+    static void GetOpenGLExtensions()
+    {
+        auto count = 0;
+        GL_EXPR( glGetIntegerv( GL_NUM_EXTENSIONS, &count ) );
+        for ( int i = 0; i < count; ++i )
+            extensions.emplace_back( (char *)( glGetStringi( GL_EXTENSIONS, i ) ) );
+    }
+    static const GLMAXINTEGER & InitMaxInteger()
+    {
+        GL_EXPR( glGetIntegerv( GL_MAX_VERTEX_ATTRIBS, &maxInteger.MAX_VERTEX_ATTRIBS ) );
+        GL_EXPR( glGetIntegerv( GL_MAX_TEXTURE_IMAGE_UNITS, &maxInteger.MAX_TEXTURE_IMAGE_UNITE ) );
+        GL_EXPR( glGetIntegerv( GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS, &maxInteger.MAX_SHADER_STORAGE_BINDINGS ) );
+        GL_EXPR( glGetIntegerv( GL_MAX_ATOMIC_COUNTER_BUFFER_BINDINGS, &maxInteger.MAX_ATOMIC_COUNTER_BUFFER_BINDINGS ) );
+        GL_EXPR( glGetIntegerv( GL_MAX_IMAGE_UNITS, &maxInteger.MAX_IMAGE_UNITS ) );
+        GL_EXPR( glGetIntegerv( GL_MAX_3D_TEXTURE_SIZE, &maxInteger.MAX_3DTEXUTRE_SIZE ) );
+        GL_EXPR( glGetIntegerv( GL_MAX_COMBINED_UNIFORM_BLOCKS, &maxInteger.MAX_UNIFORM_BLOCKS_COUNT ) );
+
+        if ( CheckSupportForExtension( "GL_NVX_gpu_memory_info" ) ) {  // NVDIA GPU
+            constexpr int GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX = 0x9047;		   // dedicated video memory, total size (in kb) of the GPU memory
+            constexpr int GPU_MEMORY_INFO_TOTAL_AVAILABEL_MEMORY_NVX = 0x9048;	 // total available memory, total size (in Kb) of the memory available for allocations
+            constexpr int GPU_MEMORY_INFO_CURRENT_AVAILABEL_VIDEMEM_NVX = 0x9049;  //current available dedicated video memory (in kb), currently unused GPU memory
+            GL_EXPR( glGetIntegerv( GPU_MEMORY_INFO_TOTAL_AVAILABEL_MEMORY_NVX, &maxInteger.MAX_GPU_MEMORY_SIZE ) );
+
+        } else if ( CheckSupportForExtension( "GL_ATI_meminfo" ) ) {   // AMD GPU
+            constexpr int GPU_VBO_FREE_MEMORY_ATI = 0x87FB;
+            constexpr int GPU_TEXTURE_FREE_MEMORY_ATI = 0x87FC;
+            constexpr int GPU_RENDERBUFFER_FREE_MEMORY_ATI = 0x87FD;
+            int texFreeMem = 0, vboFreeMem = 0, renderBufferFreeMem = 0;
+            GL_EXPR( glGetIntegerv( GPU_TEXTURE_FREE_MEMORY_ATI, &texFreeMem ) );
+            GL_EXPR( glGetIntegerv( GPU_VBO_FREE_MEMORY_ATI, &vboFreeMem ) );
+            GL_EXPR( glGetIntegerv( GPU_RENDERBUFFER_FREE_MEMORY_ATI, &renderBufferFreeMem ) );
+            maxInteger.MAX_GPU_MEMORY_SIZE = texFreeMem + vboFreeMem + renderBufferFreeMem;
+        }
+
+        printf( "MAX_VERTEX_ATTRIBS:%d\n", maxInteger.MAX_VERTEX_ATTRIBS );
+        printf( "MAX_TEXTURE_IMAGE_UNITE:%d\n", maxInteger.MAX_TEXTURE_IMAGE_UNITE );
+        printf( "MAX_SHADER_STORAGE_BINDINGS:%d\n", maxInteger.MAX_SHADER_STORAGE_BINDINGS );
+        printf( "MAX_ATOMIC_COUNTER_BUFFER_BINDINGS:%d\n", maxInteger.MAX_ATOMIC_COUNTER_BUFFER_BINDINGS );
+        printf( "MAX_IMAGE_UNITS:%d\n", maxInteger.MAX_IMAGE_UNITS );
+        printf( "MAX_3DTEXTURE_SIZE:%d\n", maxInteger.MAX_3DTEXUTRE_SIZE );
+        printf( "MAX_UNIFORM_BLOCKS_COUNT:%d\n", maxInteger.MAX_UNIFORM_BLOCKS_COUNT );
+        printf( "MAX_GPU_MEMORY_SIZE:%d", maxInteger.MAX_GPU_MEMORY_SIZE );
+
+    }
+
+public:
     GL3WImpl(){
-        Init();}
+        Init();
+        GetOpenGLExtensions();
+        InitMaxInteger();
+        }
     static void Init()
     {
         auto res = gl3wInit();
@@ -208,4 +266,19 @@ struct GL3WImpl
             throw std::runtime_error("OpenGL 4.5 or higher is required\n");
         }
     }
+
+    const GLMAXINTEGER & GetGLProperties(){
+        return maxInteger;
+    }
+    
+    
+    static bool CheckSupportForExtension( const std::string &ext )
+    {
+        for ( const auto &e : extensions )
+            if ( ext == e )
+                return true;
+        return false;
+    }
 };
+GLMAXINTEGER GL3WImpl::maxInteger = GLMAXINTEGER();
+std::vector<std::string> GL3WImpl::extensions = std::vector<std::string>();

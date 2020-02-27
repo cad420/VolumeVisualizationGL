@@ -14,56 +14,47 @@
 * cacheVolume3: A 3D texture represent the in-memory volume data. OPTIONAL:True
 */
 
-uniform sampler1D texTransfunc;
-uniform sampler3D cacheVolume0;
-uniform sampler3D cacheVolume1;
-uniform sampler3D cacheVolume2;
-uniform sampler3D cacheVolume3;
+layout( location = 0, rgba32f ) uniform volatile image2D entryPos;
+layout( location = 1, rgba32f ) uniform volatile image2D endPos;
+layout( location = 2, rgba32f ) uniform volatile image2DRect interResult;
+layout( binding = 3 ) uniform atomic_uint atomic_count[ 10 ];  // most 10 lods
+layout(location = 4) uniform sampler1D texTransfunc;
+layout(location = 5) uniform sampler3D cacheVolume0;
+layout(location = 6) uniform sampler3D cacheVolume1;
+layout(location = 7) uniform sampler3D cacheVolume2;
+layout(location = 8) uniform sampler3D cacheVolume3;
 //uniform sampler3D cacheVolumes[5];
 
-layout( binding = 2, rgba32f ) uniform volatile image2D entryPos;
-layout( binding = 3, rgba32f ) uniform volatile image2D endPos;
-layout( binding = 4, rgba32f ) uniform volatile image2DRect interResult;
-
-uniform float step;
-// illumination params
-//uniform vec3 lightdir;
-//uniform vec3 halfway;
 
 uniform float ka;
 uniform float kd;
 uniform float shininess;
 uniform float ks;
-uniform mat4 vpl_ModelMatrix;
-uniform mat4 vpl_ViewMatrix;
 
-uniform vec3 fuckPos;
-in vec2 screenCoord;
-out vec4 fragColor;
+uniform float step;
+layout(location = 9) uniform mat4 ModelMatrix;
+layout(location = 10) uniform mat4 ViewMatrix;
+layout(location = 11) uniform vec3 viewPos;
+
+vec2 vSize = vec2( 1024, 768 );
+float aspectRatio = vSize.x / vSize.y;
+
 // Out-Of-Core uniforms
-uniform ivec3 repeatOffset;  // repeat boarder size
-uniform int lodNum;
-uniform int CUR_LOD;
+uniform int LODCount;
 
-uniform float fov;
-
-layout( binding = 3 ) uniform atomic_uint atomic_count[ 10 ];  // most 10 lods
 
 layout( std430, binding = 0 ) buffer HashTable
 {
 	uint blockId[];
-}
-hashTable;
+}hashTable;
 layout( std430, binding = 1 ) buffer MissedBlock
 {
 	uint blockId[];
-}
-missedBlock;
+}missedBlock;
 layout( std430, binding = 2 ) buffer PageTable
 {
 	uvec4 pageEntry[];
-}
-pageTable;
+}pageTable;
 
 struct LODInfo
 {
@@ -79,11 +70,10 @@ struct LODInfo
 layout( std140, binding = 3 ) buffer LODInfoBuffer
 {
 	LODInfo lod[];
-}
-lodInfoBuffer;
+}lodInfoBuffer;
 
-vec2 vSize = vec2( 1024, 768 );
-float aspectRatio = vSize.x / vSize.y;
+out vec4 fragColor;
+
 
 //float stepTable[ 7 ] = {
 //	0.000018,
@@ -121,7 +111,7 @@ int EvalLOD( float d )
 		lod = 4;
 	else
 		lod = 5;
-	return clamp( lod, 0, lodNum - 1 );
+	return clamp( lod, 0, LODCount - 1 );
 
 	//const float fovRadian =  fov * 3.1415926535/180.0;
 	//const float a = fovRadian*fovRadian*1.33333 / (1024*768*1.0);
@@ -130,7 +120,7 @@ int EvalLOD( float d )
 	//{
 	//	if (r < lodTables[i])
 	//	{
-	//		return clamp(i,0,lodNum-1);
+	//		return clamp(i,0,LODCount-1);
 	//	}
 	//}
 }
@@ -172,8 +162,8 @@ float EvalDistanceFromViewToBlockCenterCoord( vec3 samplePos, int curLod )
 	vec4 center;
 	center.w = 1;
 	center.xyz = ( vec3( entry3DIndex ) + vec3( 0.5, 0.5, 0.5 ) ) / vec3(pageTableSize);
-	vec4 r = vpl_ModelMatrix * center;
-	return distance( fuckPos, r.xyz/r.w );
+	vec4 r = ModelMatrix * center;
+	return distance( viewPos, r.xyz/r.w );
 }
 
 /* Debug Code
@@ -205,7 +195,7 @@ vec3 EvalBlockColor(vec3 samplePos,int curLod )
 }
 */
 
-vec4 virtualVolumeSample( vec3 samplePos, in out int curLod, out bool mapped, out vec3 blockColor )
+vec4 virtualVolumeSample( vec3 samplePos, inout int curLod, out bool mapped, out vec3 blockColor )
 {
 	vec4 scalar;
 
@@ -241,7 +231,8 @@ vec4 virtualVolumeSample( vec3 samplePos, in out int curLod, out bool mapped, ou
 		mapped = false;
 	} else {
 		int texId = int( ( pageTableEntry.w >> 4 ) & 0xf );
-		vec3 samplePoint = pageTableEntry.xyz * ( blockDataSizeNoRepeat + 2 * repeatOffset ) + blockOffset + ( repeatOffset );
+		const int padding = lodInfoBuffer.lod[ curLod ].padding;
+		vec3 samplePoint = pageTableEntry.xyz * ( blockDataSizeNoRepeat + 2 * padding ) + blockOffset + ( padding );
 		if ( texId == 0 ) {
 			samplePoint = samplePoint / textureSize( cacheVolume0, 0 );
 			scalar = texture( cacheVolume0, samplePoint );

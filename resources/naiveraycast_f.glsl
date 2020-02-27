@@ -1,11 +1,10 @@
 #version 430 core
 
-layout(location = 0) uniform sampler1D texTransfunc;
-layout(location = 1) uniform sampler3D volumeTexture;
-
-layout(location = 2,rgba32f) uniform volatile image2D entryPosTexture;
-layout(location = 3,rgba32f) uniform volatile image2D exitPosTexture;
-layout(location = 4,rgba32f) uniform volatile image2D resutlTexture;
+layout(location = 0,rgba32f) uniform volatile image2D entryPosTexture;
+layout(location = 1,rgba32f) uniform volatile image2D exitPosTexture;
+layout(location = 2,rgba32f) uniform volatile image2D resutlTexture;
+layout(location = 3) uniform sampler1D texTransfunc;
+layout(location = 4) uniform sampler3D volumeTexture;
 
 //layout(location = 0 ) uniform mat4 ModelMatrix;
 //layout(location = 1 ) uniform mat4 ViewMatrix;

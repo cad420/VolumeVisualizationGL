@@ -74,6 +74,19 @@ struct EventListenerTraits
     static FramebufferResizeEventCallback FramebufferResizeEvent;
 };
 
+struct GLMAXINTEGER
+{
+    int MAX_VERTEX_ATTRIBS = -1;
+    int MAX_TEXTURE_IMAGE_UNITE = -1;
+    int MAX_SHADER_STORAGE_BINDINGS = -1;
+    int MAX_ATOMIC_COUNTER_BUFFER_BINDINGS = -1;
+    int MAX_IMAGE_UNITS = -1;
+    int MAX_3DTEXUTRE_SIZE = -1;
+    int MAX_UNIFORM_BLOCKS_COUNT = -1;
+    int MAX_GPU_MEMORY_SIZE = -1;
+};
+
+
 MouseEventCallback EventListenerTraits::MouseEvent = MouseEventCallback();
 ScrollEventCallback EventListenerTraits::ScrollEvent=ScrollEventCallback();
 KeyboradEventCallback EventListenerTraits::KeyboardEvent = KeyboradEventCallback();
