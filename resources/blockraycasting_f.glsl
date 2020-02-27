@@ -35,12 +35,12 @@ uniform float step;
 layout(location = 9) uniform mat4 ModelMatrix;
 layout(location = 10) uniform mat4 ViewMatrix;
 layout(location = 11) uniform vec3 viewPos;
+layout(location = 12) uniform int LODCount;
 
 vec2 vSize = vec2( 1024, 768 );
 float aspectRatio = vSize.x / vSize.y;
 
 // Out-Of-Core uniforms
-uniform int LODCount;
 
 
 layout( std430, binding = 0 ) buffer HashTable
@@ -312,6 +312,7 @@ float rand( vec2 co )
 
 void main()
 {
+	
 	vec4 rayStartInfo = imageLoad( entryPos, ivec2( gl_FragCoord ) ).xyzw;
 	vec3 rayStart = rayStartInfo.xyz;
 	vec3 rayEnd = imageLoad( endPos, ivec2( gl_FragCoord ) ).xyz;
@@ -335,7 +336,6 @@ void main()
 	//		fragColor = bg;
 	//		return;
 	//	}
-
 	for ( int i = 0; i < 10000; ++i ) {
 		if ( samplePoint.x < 0.00 ||
 			 samplePoint.y < 0.00 ||
@@ -346,7 +346,7 @@ void main()
 			break;
 
 		int curLod = EvalLOD( EvalDistanceFromViewToBlockCenterCoord( samplePoint, prevLOD ) );
-
+		//int curLod = 0;
 		samplePoint += direction * stepTable[ curLod ] * ( float( i ) + 0.5 );
 
 		//if(isboader(samplePoint) == true)
@@ -361,6 +361,7 @@ void main()
 			imageStore( entryPos, ivec2( gl_FragCoord ), vec4( samplePoint, float( curLod ) ) );
 			imageStore( interResult, ivec2( gl_FragCoord ), vec4( color ) );
 			discard;
+			//return;
 		}
 
 		//vec4 sampledColor = texture(texTransfunc, scalar.r);

@@ -207,6 +207,7 @@ namespace
 }
 namespace {
 
+void PrintVideoMemoryUsageInfo( std::ostream &os,const HelperObjectSet & set,IVideoMemoryParamsEvaluator * memoryEvaluators);
 void PrintCamera( const ViewingTransform & camera )
 {
 	println( "Position:\t{}\t", camera.GetViewMatrixWrapper().GetPosition() );
@@ -412,7 +413,7 @@ size_t availableHostMemoryHint)
 
 }
 
-void glCall_ResourcesBinding(HelperObjectSet & set){
+void glCall_ResourcesBinding(HelperObjectSet & set,GL::GLProgram & outofcoreProgram){
 	assert(set.GPUSet.GLPageTableBuffer.Valid());
 	assert(set.GPUSet.GLAtomicCounterBuffer.Valid());
 	assert(set.GPUSet.GLBlockIDBuffer.Valid());
@@ -430,13 +431,15 @@ void glCall_ResourcesBinding(HelperObjectSet & set){
 	GL_EXPR(glBindBufferBase(GL_SHADER_STORAGE_BUFFER,3,set.GPUSet.GLLODInfoBuffer));
 
 	assert(set.GPUSet.LODInfoBufferBytes == set.CPUSet.VolumeData.size() * sizeof(_std140_layout_LODInfo));
-	GL_EXPR(glNamedBufferStorage(set.GPUSet.GLLODInfoBuffer,set.GPUSet.LODInfoBufferBytes,set.CPUSet.LODInfoCPUBuffer.data(),storage_flags));
+	GL_EXPR(glNamedBufferSubData(set.GPUSet.GLLODInfoBuffer,0,set.GPUSet.LODInfoBufferBytes,set.CPUSet.LODInfoCPUBuffer.data()));
 	
 	for(int i = 0 ; i< set.GPUSet.GLVolumeTexture.size();i++){
 		// binding volume textures as unit 1,2,3,4
 		assert(set.GPUSet.GLVolumeTexture[i]);
 		GL_EXPR(glBindTextureUnit(i+1,set.GPUSet.GLVolumeTexture[i]));
 	}
+	assert(outofcoreProgram.Valid());
+	GL_EXPR(glProgramUniform1i(outofcoreProgram,12,set.CPUSet.VolumeData.size()));
 }
 
 void glCall_ClearObjectSet(HelperObjectSet & set){
@@ -450,12 +453,14 @@ PluginLoader & pluginLoader,
 size_t availableHostMemoryHint,
 size_t availableDeviceMemoryHint)
 {
-	LVDJSONStruct lvdJSON;
-	HelperObjectSet set;
-	std::ifstream json( fileName );
-	json >> lvdJSON;
+	// LVDJSONStruct lvdJSON;
+	// std::ifstream json( fileName );
+	// json >> lvdJSON;
 
-	set.CPUSet = CreateHelperCPUObjectSet(lvdJSON.fileNames,pluginLoader,availableHostMemoryHint);
+	vector<string> testFileNames{"/home/ysl/data/s1.brv"};
+
+	HelperObjectSet set;
+	set.CPUSet = CreateHelperCPUObjectSet(testFileNames,pluginLoader,availableHostMemoryHint * 1024*1024);
 	if(set.CPUSet.VolumeData.size() == 0){
 		println("No Volume Data");
 		return set;
@@ -463,7 +468,7 @@ size_t availableDeviceMemoryHint)
 
 	auto evaluator = make_shared<MyEvaluator>(set.CPUSet.VolumeData[0]->BlockDim(),
 	set.CPUSet.VolumeData[0]->BlockSize(),
-	availableDeviceMemoryHint);
+	availableDeviceMemoryHint * 1024*1024);
 
 	const auto textureSize = evaluator->EvalPhysicalTextureSize();
 	const auto textureCount = evaluator->EvalPhysicalTextureCount();
@@ -546,13 +551,14 @@ size_t availableDeviceMemoryHint)
 														  textureBlockDim,
 														  textureCount );
 
+	PrintVideoMemoryUsageInfo(std::cout,set,evaluator.get());
 
     return set;
 }
 bool glCall_Refine(HelperObjectSet & set,
 vector<uint32_t> & missedBlockIDPool,
 vector<BlockDescriptor> & descs){
-
+	GL_EXPR(glFinish());
 	assert(set.GPUSet.AtomicCounterBufferPersistentMappedPointer);
 	assert(set.GPUSet.BlockIDBufferPersistentMappedPointer);
 	assert(set.GPUSet.HashBufferPersistentMappedPointer);
@@ -602,12 +608,51 @@ vector<BlockDescriptor> & descs){
 	return refined;
 }
 
-ViewingTransform CreateCameraFromFile(const std::string & camFileName,
-const Point3f & defaultPos,
-const Vec3f & defaultUp,
-const Point3f & defaultCenter){
-	
+
+void PrintVideoMemoryUsageInfo( std::ostream &os,const HelperObjectSet & set,IVideoMemoryParamsEvaluator * memoryEvaluators)
+{
+	const size_t volumeTextureMemoryUsage = memoryEvaluators->EvalPhysicalTextureSize().Prod() * memoryEvaluators->EvalPhysicalTextureCount();
+	size_t pageTableBufferBytes = 0;
+	size_t totalCPUMemoryUsage = 0;
+	const auto lodCount = set.CPUSet.VolumeData.size();
+	auto & cpuVolumeData = set.CPUSet.VolumeData;
+	auto & mappingTableManager = set.MappingManager;
+	auto & lodInfo = set.CPUSet.LODInfoCPUBuffer;
+	for ( int i = 0; i < lodCount; i++ ) {
+		fprintln( os, "===========LOD[{}]==============", i );
+		fprintln( os, "Data Resolution: {}", cpuVolumeData[i]->DataSizeWithoutPadding());
+		fprintln( os, "Block Dimension: {}", cpuVolumeData[ i ]->BlockDim() );
+		fprintln( os, "Block Size: {}", cpuVolumeData[ i ]->BlockSize() );
+		fprintln( os, "Data Size: {.2} GB", (cpuVolumeData[ i ]->BlockDim() * cpuVolumeData[i]->BlockSize()).Prod() * 1.0/1024/1024/1024 );
+		fprintln( os, "CPU Memory Usage: {.2} GB", cpuVolumeData[ i ]->CPUCacheSize().Prod()*1.0/1024/1024/1024 );
+		
+		const auto blocks = cpuVolumeData[ i ]->BlockDim().Prod();
+		fprintln( os, "Hash Memory Usage: {}, Offset: {}", blocks * sizeof( uint32_t ), lodInfo[ i ].hashBufferOffset );
+		fprintln( os, "IDBuffer Memory Usage: {}, Offset: {}", blocks * sizeof( uint32_t ), lodInfo[ i ].idBufferOffset );
+		fprintln( os, "PageTable Memory Usage: {}, Offset: {}", mappingTableManager->GetBytes( i ), lodInfo[ i ].pageTableOffset );
+
+		pageTableBufferBytes += mappingTableManager->GetBytes( i );
+		totalCPUMemoryUsage += cpuVolumeData[ i ]->CPUCacheSize().Prod();
 	}
+
+	const auto totalGPUMemoryUsage = pageTableBufferBytes + 
+	volumeTextureMemoryUsage + 
+	set.GPUSet.BlockIDBufferBytes + 
+	set.GPUSet.HashBufferBytes;
+
+	println( "BlockDim: {} | Texture Size: {}", memoryEvaluators->EvalPhysicalBlockDim(), memoryEvaluators->EvalPhysicalTextureSize() );
+	fprintln( os, "------------Summary Memory Usage ---------------" );
+	fprintln( os, "Data Resolution: {}", cpuVolumeData[ 0 ]->DataSizeWithoutPadding() );
+	fprintln( os, "Volume Texture Memory Usage: {} Bytes = {.2} MB", volumeTextureMemoryUsage, volumeTextureMemoryUsage * 1.0 / 1024 / 1024 );
+	fprintln( os, "Page Table Memory Usage: {} Bytes = {.2} MB", pageTableBufferBytes, pageTableBufferBytes * 1.0 / 1024 / 1024 );
+	fprintln( os, "Total ID Buffer Block Memory Usage: {} Bytes = {.2} MB", set.GPUSet.BlockIDBufferBytes, set.GPUSet.BlockIDBufferBytes * 1.0 / 1024 / 1024 );
+	fprintln( os, "Total Hash Buffer Block Memory Usage: {} Bytes = {.2} MB", set.GPUSet.HashBufferBytes, set.GPUSet.HashBufferBytes * 1.0 / 1024 / 1024 );
+	fprintln( os, "Total Volume Data GPU Memory Usage: {} Bytes = {.2} GB",totalGPUMemoryUsage, totalGPUMemoryUsage*1.0/1024/1024/1024 );
+	fprintln( os, "Total CPU Memory Usage: {} Bytes = {.2} GB", totalCPUMemoryUsage, totalCPUMemoryUsage * 1.0 / 1024 / 1024 / 1024 );
+	fprintln( os, "================================" );
+
+}
+
 
 }
 
@@ -620,7 +665,7 @@ int main(int argc,char ** argv)
 	a.add<int>("width",'w',"width of window",false,1024);
 	a.add<int>("height",'h',"height of window",false,768);
 	a.add<size_t>("hmem",'\0',"specifices available host memory in MB",false,8000);
-	a.add<size_t>("dmem",'\0',"specifices available device memory in MB",false,2000);
+	a.add<size_t>("dmem",'\0',"specifices available device memory in MB",false,50);
 	a.add<string>("lods",'\0',"data json file",false);
 	a.add<string>("cam",'\0',"camera json file",false);
 	a.add<string>("tf",'\0',"transfer function text file",false);
@@ -632,6 +677,7 @@ int main(int argc,char ** argv)
 	auto lodsFileName = a.get<string>("lods");
 	auto camFileName = a.get<string>("cam");
 	auto tfFileName = a.get<string>("tf");
+	
 
 
 
@@ -664,7 +710,7 @@ int main(int argc,char ** argv)
 	Transform ModelTransform;										/*Model Matrix*/
 	ModelTransform.SetIdentity();
 
-    ViewingTransform camera({10,10,10},{0,1,0},{0,0,0}); 				/*camera controller (Projection and view matrix)*/
+    ViewingTransform camera({5,5,5},{0,1,0},{0,0,0}); 				/*camera controller (Projection and view matrix)*/
 	if(camFileName.empty() == false){
 		try{
 			camera = ConfigCamera(camFileName);
@@ -678,20 +724,9 @@ int main(int argc,char ** argv)
 	Vec3i dataResolution;
 	vector<uint32_t> missedBlockHostPool;                            /*Reported missed block ID cache*/
 	vector<BlockDescriptor> blockDescHostPool;
-
-
 	HelperObjectSet set;
-	lodsFileName ="/home/ysl/data/s1.brv";
-	if(lodsFileName.empty() == false){
-		try{
-			set = glCall_SetupResources(*gl,lodsFileName,*PluginLoader::GetPluginLoader(),availableHostMemory,availableDeviceMemory);
-			glCall_ResourcesBinding(set);
-			glCall_ClearObjectSet(set);
-			RenderPause = false; 	// If data is loaded successfully, starts rendering.
-		}catch(exception & e){
-			println("Cannot open .lods file: {}",e.what());
-		}
-	}
+
+
 
 	/**
 	 * @brief Stores the transfer function texture
@@ -739,17 +774,17 @@ int main(int argc,char ** argv)
 	GL_EXPR(glNamedBufferSubData(vbo,0,sizeof(CubeVertices),CubeVertices));
 	GL_EXPR(glNamedBufferSubData(ebo,0,sizeof(CubeVertexIndices),CubeVertexIndices));
 
-	// test volume texture
-	RawReader reader("/home/ysl/data/s1_128_128_128.raw",{128,128,128},1);
-	auto size = reader.GetDimension().Prod() * reader.GetElementSize();
-	std::unique_ptr<uint8_t[]> buf(new uint8_t[size]);
-	if(reader.readRegion({0,0,0},{128,128,128},buf.get()) != size){
-		println("Failed to read raw data");
-		exit(-1);
-	}
-	auto testTexture = glCall_CreateVolumeTexture(*gl,128,128,128);
-	assert(testTexture.Valid());
-	GL_EXPR(glTextureSubImage3D(testTexture,0,0,0,0,128,128,128,GL_RED,GL_UNSIGNED_BYTE,buf.get()));
+	// // test volume texture
+	// RawReader reader("/home/ysl/data/s1_128_128_128.raw",{128,128,128},1);
+	// auto size = reader.GetDimension().Prod() * reader.GetElementSize();
+	// std::unique_ptr<uint8_t[]> buf(new uint8_t[size]);
+	// if(reader.readRegion({0,0,0},{128,128,128},buf.get()) != size){
+	// 	println("Failed to read raw data");
+	// 	exit(-1);
+	// }
+	// auto testTexture = glCall_CreateVolumeTexture(*gl,128,128,128);
+	// assert(testTexture.Valid());
+	// GL_EXPR(glTextureSubImage3D(testTexture,0,0,0,0,128,128,128,GL_RED,GL_UNSIGNED_BYTE,buf.get()));
 
 	//[2] Create transfer function texture
 	GLTFTexture = gl->CreateTexture(GL_TEXTURE_1D);
@@ -799,20 +834,23 @@ int main(int argc,char ** argv)
 	glCall_LinkProgramAndCheckHelper(positionGenerateProgram);
 
     //[2] ray casting shader
+	// vs = GetTextFromFile("resources/screenquad_v.glsl");
+	// pVS = vs.c_str();
+	// vShader = glCall_CreateShaderAndCompileHelper(*gl,GL_VERTEX_SHADER,pVS);
+
+	// fs = GetTextFromFile("resources/naiveraycast_f.glsl");
+	// pFS = fs.c_str();
+	// fShader = glCall_CreateShaderAndCompileHelper(*gl,GL_FRAGMENT_SHADER,pFS);
+
+	// auto raycastingProgram = gl->CreateProgram();
+	// GL_EXPR(glAttachShader(raycastingProgram,vShader));
+	// GL_EXPR(glAttachShader(raycastingProgram,fShader));
+	// glCall_LinkProgramAndCheckHelper(raycastingProgram);
+
+	//[2] out-of-core raycasting shader
 	vs = GetTextFromFile("resources/screenquad_v.glsl");
 	pVS = vs.c_str();
 	vShader = glCall_CreateShaderAndCompileHelper(*gl,GL_VERTEX_SHADER,pVS);
-
-	fs = GetTextFromFile("resources/naiveraycast_f.glsl");
-	pFS = fs.c_str();
-	fShader = glCall_CreateShaderAndCompileHelper(*gl,GL_FRAGMENT_SHADER,pFS);
-
-	auto raycastingProgram = gl->CreateProgram();
-	GL_EXPR(glAttachShader(raycastingProgram,vShader));
-	GL_EXPR(glAttachShader(raycastingProgram,fShader));
-	glCall_LinkProgramAndCheckHelper(raycastingProgram);
-
-	//[2] out-of-core raycasting shader
 	fs = GetTextFromFile("resources/blockraycasting_f.glsl");
 	pFS = fs.c_str();
 	fShader = glCall_CreateShaderAndCompileHelper(*gl,GL_FRAGMENT_SHADER,pFS);
@@ -821,6 +859,8 @@ int main(int argc,char ** argv)
 	GL_EXPR(glAttachShader(outofcoreProgram,vShader));
 	GL_EXPR(glAttachShader(outofcoreProgram,fShader));
 	glCall_LinkProgramAndCheckHelper(outofcoreProgram);
+
+
 
 	//[3] screen rendering program (render the result texture onto the screen (Do not use Blit api))
 	fs = GetTextFromFile("resources/screenquad_f.glsl");
@@ -835,11 +875,10 @@ int main(int argc,char ** argv)
 	gl->DeleteGLObject(vShader);
 	gl->DeleteGLObject(fShader);
 
-
 	/* Texture unit and image unit binding*/
 	// [1] binds texture unit : see the raycasting shader for details
 	GL_EXPR(glBindTextureUnit(0,GLTFTexture)); 	            // binds texture unit 0 for tf texture
-	GL_EXPR(glBindTextureUnit(1,testTexture));              // binds texture unit 1 for volume texture
+	//GL_EXPR(glBindTextureUnit(1,testTexture));              // binds texture unit 1 for volume texture
 	// [2] binds image unit : see the raycasting shader for details
 	GL_EXPR(glBindImageTexture(0,GLEntryPosTexture,0,GL_FALSE,0,GL_READ_WRITE,GL_RGBA32F)); // binds image unit 0 for entry texture (read and write)
 	GL_EXPR(glBindImageTexture(1,GLExitPosTexture,0,GL_FALSE,0,GL_READ_WRITE,GL_RGBA32F)); // binds image unit 1 for exit texture (read and write)
@@ -856,14 +895,14 @@ int main(int argc,char ** argv)
 	GL_EXPR(glSamplerParameterf(sampler,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE));
 	GL_EXPR(glSamplerParameterf(sampler,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE));
 
-	GL_EXPR(glProgramUniform1i(raycastingProgram,3,0)); // sets location = 0 (tf texture sampler) as tf texture unit 0
-	GL_EXPR(glBindSampler(0,sampler));
-	GL_EXPR(glProgramUniform1i(raycastingProgram,4,1)); // sets location = 1 (volume texture sampler) as volume texture unit 1
-	GL_EXPR(glBindSampler(1,sampler));
+	// GL_EXPR(glProgramUniform1i(raycastingProgram,3,0)); // sets location = 0 (tf texture sampler) as tf texture unit 0
+	// GL_EXPR(glBindSampler(0,sampler));
+	// GL_EXPR(glProgramUniform1i(raycastingProgram,4,1)); // sets location = 1 (volume texture sampler) as volume texture unit 1
+	// GL_EXPR(glBindSampler(1,sampler));
 
-	GL_EXPR(glProgramUniform1i(raycastingProgram,0,0)); // sets location = 2 as entry image unit 0
-	GL_EXPR(glProgramUniform1i(raycastingProgram,1,1)); // sets location = 3 as exit image unit 1
-	GL_EXPR(glProgramUniform1i(raycastingProgram,2,2)); // sets location = 4 as result image unit 2
+	// GL_EXPR(glProgramUniform1i(raycastingProgram,0,0)); // sets location = 2 as entry image unit 0
+	// GL_EXPR(glProgramUniform1i(raycastingProgram,1,1)); // sets location = 3 as exit image unit 1
+	// GL_EXPR(glProgramUniform1i(raycastingProgram,2,2)); // sets location = 4 as result image unit 2
 
 	//[2] out-of-core raycasting shader
 	GL_EXPR(glProgramUniform1i(outofcoreProgram,0,0)); // sets location = 0 as entry image unit 0
@@ -882,6 +921,8 @@ int main(int argc,char ** argv)
 
 	//[3] screen rendering shader
 	GL_EXPR(glProgramUniform1i(screenQuadProgram,0,2)); // sets location = 0 as result image unit 2
+
+
 
 	/* Install event listeners */
 	GL::MouseEvent = [&](void*,MouseButton buttons,EventAction action,int xpos,int ypos){
@@ -1004,7 +1045,7 @@ int main(int argc,char ** argv)
 			} else if ( extension == ".lods" ) {
 				//UpdateCPUVolumeData(each);
 				set = glCall_SetupResources(*gl,each,*PluginLoader::GetPluginLoader(),availableHostMemory,availableDeviceMemory);
-				glCall_ResourcesBinding(set);
+				glCall_ResourcesBinding(set,outofcoreProgram);
 				glCall_ClearObjectSet(set);
 				RenderPause = false;
 				found = true;
@@ -1019,6 +1060,19 @@ int main(int argc,char ** argv)
 			if ( found )
 				break;
 		}};
+
+	
+	lodsFileName ="/home/ysl/data/s1.brv";
+	if(lodsFileName.empty() == false){
+		try{
+			set = glCall_SetupResources(*gl,lodsFileName,*PluginLoader::GetPluginLoader(),availableHostMemory,availableDeviceMemory);
+			glCall_ResourcesBinding(set,outofcoreProgram);
+			glCall_ClearObjectSet(set);
+			RenderPause = false; 	// If data is loaded successfully, starts rendering.
+		}catch(exception & e){
+			println("Cannot open .lods file: {}",e.what());
+		}
+	}
 
 
     while(gl->Wait() == false && RenderPause){gl->DispatchEvent();}
@@ -1057,11 +1111,13 @@ int main(int argc,char ** argv)
 		// Pass [2 - n]: Ray casting here
 		GL_EXPR(glDisable(GL_BLEND));
 
-		GL_EXPR(glUseProgram(raycastingProgram));
+		//GL_EXPR(glUseProgram(raycastingProgram));
+		GL_EXPR(glUseProgram(outofcoreProgram));
 		GL_EXPR(glNamedFramebufferDrawBuffer(GLFramebuffer,GL_COLOR_ATTACHMENT2)); // draw into result texture
-		GL_EXPR(glDrawArrays(GL_TRIANGLE_STRIP,0,4)); // vertex is hard coded in shader
-
 		//While out-of-core refine
+		do{
+			GL_EXPR(glDrawArrays(GL_TRIANGLE_STRIP,0,4)); // vertex is hard coded in shader
+		}while(glCall_Refine(set,missedBlockHostPool,blockDescHostPool) == false);
 
 		// Pass [n + 1]: Blit result to default framebuffer
 		GL_EXPR(glBindFramebuffer(GL_FRAMEBUFFER,0));  // prepare to display
