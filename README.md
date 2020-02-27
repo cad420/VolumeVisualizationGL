@@ -25,7 +25,7 @@ The only external dependency is **[GLFW][2]**.
 
 Besides, it has dependent libraries **[VMCore][1]**,**[VMUtils][2]** and **[VMat][3]**, which are automatically installed by the cmake scripts
 ### Windows:
-**[Vcpkg][3] is highly recommanded to install the GLFW**. 
+**[Vcpkg][5] is highly recommanded to install the GLFW**. 
 
 ```
 git clone https://github.com/cad420/VolumeVisualizationGL.git --recursive
