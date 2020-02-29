@@ -45,6 +45,10 @@ namespace
 		VM_JSON_FIELD( std::vector<float>, spacing );
 	};
 
+
+	using DeviceMemoryEvalutor = std::function<Vector4i(const Vector3i &)>;
+	
+
 	struct MyEvaluator : IVideoMemoryParamsEvaluator
 	{
 	private:
@@ -207,7 +211,11 @@ namespace
 }
 namespace {
 
-void PrintVideoMemoryUsageInfo( std::ostream &os,const HelperObjectSet & set,IVideoMemoryParamsEvaluator * memoryEvaluators);
+/**
+ * @brief Summarizes and prints GPU memory usage of texture and buffer used by ray-cating 
+ * 
+ */
+void PrintVideoMemoryUsageInfo( std::ostream &os,const HelperObjectSet & set,size_t volumeTextureMemoryUsage);
 void PrintCamera( const ViewingTransform & camera )
 {
 	println( "Position:\t{}\t", camera.GetViewMatrixWrapper().GetPosition() );
@@ -217,6 +225,12 @@ void PrintCamera( const ViewingTransform & camera )
 	println( "ViewMatrix:\t{}\t", camera.GetViewMatrixWrapper().LookAt() );
 }
 
+/**
+ * @brief Get the Text From File object
+ * 
+ * @param fileName text file name
+ * @return string text containt string
+ */
 string GetTextFromFile(const string & fileName)
 {
 	ifstream in(fileName,std::ios::in);
@@ -228,6 +242,14 @@ string GetTextFromFile(const string & fileName)
 	return string{std::istreambuf_iterator<char>{in},std::istreambuf_iterator<char>{}};
 }
 
+/**
+ * @brief Returns a shader whose soure code is \a source and the type specified by \a shaderType  
+ * 
+ * @param gl GL context
+ * @param shaderType a GLenum type of shader type
+ * @param source shader source code string pointer
+ * @return GL::GLShader 
+ */
 GL::GLShader glCall_CreateShaderAndCompileHelper(GL & gl,GLenum shaderType, const char * source){
 
 	auto handle = gl.CreateShader(shaderType);
@@ -244,6 +266,11 @@ GL::GLShader glCall_CreateShaderAndCompileHelper(GL & gl,GLenum shaderType, cons
 	return handle;
 }
 
+/**
+ * @brief Links program and check if the program has been linked successfully
+ * 
+ * @param program  
+ */
 void glCall_LinkProgramAndCheckHelper(GL::GLProgram & program)
 {
 	// link
@@ -259,7 +286,14 @@ void glCall_LinkProgramAndCheckHelper(GL::GLProgram & program)
 		exit(-1);
 	}
 }
-
+/**
+ * @brief Updates transfer function data of \a texture , if the \a fileName is empty, the default
+ * transfer function will be set.
+ * 
+ * @param texture an initialized \a GL::GLTexture 1D 256 dimension texture
+ * @param fileName  
+ * @param dimension 256 only
+ */
 void glCall_UpdateTransferFunctionTexture(GL::GLTexture & texture,
 const string & fileName,
 int dimension){
@@ -451,28 +485,31 @@ void glCall_ClearObjectSet(HelperObjectSet & set){
 HelperObjectSet glCall_SetupResources(GL & gl,const std::string & fileName,
 PluginLoader & pluginLoader,
 size_t availableHostMemoryHint,
-size_t availableDeviceMemoryHint)
+std::function<Vec4i(const Vec3i & blockSize)> deviceMemoryEvaluator)
 {
-	// LVDJSONStruct lvdJSON;
-	// std::ifstream json( fileName );
-	// json >> lvdJSON;
+	LVDJSONStruct lvdJSON;
+	std::ifstream json( fileName );
+	json >> lvdJSON;
 
-	vector<string> testFileNames{"/home/ysl/data/s1.brv"};
+	//vector<string> testFileNames{"/home/ysl/data/s1.brv"};
 
 	HelperObjectSet set;
-	set.CPUSet = CreateHelperCPUObjectSet(testFileNames,pluginLoader,availableHostMemoryHint * 1024*1024);
+	set.CPUSet = CreateHelperCPUObjectSet(lvdJSON.fileNames,pluginLoader,availableHostMemoryHint * 1024*1024);
 	if(set.CPUSet.VolumeData.size() == 0){
 		println("No Volume Data");
 		return set;
 	}
 
-	auto evaluator = make_shared<MyEvaluator>(set.CPUSet.VolumeData[0]->BlockDim(),
-	set.CPUSet.VolumeData[0]->BlockSize(),
-	availableDeviceMemoryHint * 1024*1024);
+	//auto evaluator = make_shared<MyEvaluator>(set.CPUSet.VolumeData[0]->BlockDim(),
+	//set.CPUSet.VolumeData[0]->BlockSize(),
+	//availableDeviceMemoryHint * 1024*1024);
 
-	const auto textureSize = evaluator->EvalPhysicalTextureSize();
-	const auto textureCount = evaluator->EvalPhysicalTextureCount();
-	const auto textureBlockDim = evaluator->EvalPhysicalBlockDim();
+	//const auto textureSize = evaluator->EvalPhysicalTextureSize();
+	auto deviceMemoryHint = deviceMemoryEvaluator(Vec3i(set.CPUSet.VolumeData[0]->BlockSize()));
+	const auto textureCount = deviceMemoryHint.w;
+	const auto textureBlockDim = Size3(Vec3i(deviceMemoryHint));
+
+	const auto textureSize = set.CPUSet.VolumeData[0]->BlockSize() * textureBlockDim;
 
 	size_t pageTableTotalEntries = 0;
 	size_t hashBufferTotalBlocks = 0;
@@ -551,7 +588,9 @@ size_t availableDeviceMemoryHint)
 														  textureBlockDim,
 														  textureCount );
 
-	PrintVideoMemoryUsageInfo(std::cout,set,evaluator.get());
+	const size_t volumeTextureMemoryUsage = textureSize.Prod() * textureCount; 
+	//PrintVideoMemoryUsageInfo(std::cout,set,volumeTextureMemoryUsage);
+	PrintVideoMemoryUsageInfo(std::cout,set,volumeTextureMemoryUsage);
 
     return set;
 }
@@ -609,9 +648,10 @@ vector<BlockDescriptor> & descs){
 }
 
 
-void PrintVideoMemoryUsageInfo( std::ostream &os,const HelperObjectSet & set,IVideoMemoryParamsEvaluator * memoryEvaluators)
+void PrintVideoMemoryUsageInfo( std::ostream &os,const HelperObjectSet & set,
+size_t volumeTextureMemoryUsage)
 {
-	const size_t volumeTextureMemoryUsage = memoryEvaluators->EvalPhysicalTextureSize().Prod() * memoryEvaluators->EvalPhysicalTextureCount();
+	//const size_t volumeTextureMemoryUsage = memoryEvaluators->EvalPhysicalTextureSize().Prod() * memoryEvaluators->EvalPhysicalTextureCount();
 	size_t pageTableBufferBytes = 0;
 	size_t totalCPUMemoryUsage = 0;
 	const auto lodCount = set.CPUSet.VolumeData.size();
@@ -640,7 +680,7 @@ void PrintVideoMemoryUsageInfo( std::ostream &os,const HelperObjectSet & set,IVi
 	set.GPUSet.BlockIDBufferBytes + 
 	set.GPUSet.HashBufferBytes;
 
-	println( "BlockDim: {} | Texture Size: {}", memoryEvaluators->EvalPhysicalBlockDim(), memoryEvaluators->EvalPhysicalTextureSize() );
+	//println( "BlockDim: {} | Texture Size: {}", memoryEvaluators->EvalPhysicalBlockDim(), memoryEvaluators->EvalPhysicalTextureSize() );
 	fprintln( os, "------------Summary Memory Usage ---------------" );
 	fprintln( os, "Data Resolution: {}", cpuVolumeData[ 0 ]->DataSizeWithoutPadding() );
 	fprintln( os, "Volume Texture Memory Usage: {} Bytes = {.2} MB", volumeTextureMemoryUsage, volumeTextureMemoryUsage * 1.0 / 1024 / 1024 );
@@ -655,6 +695,7 @@ void PrintVideoMemoryUsageInfo( std::ostream &os,const HelperObjectSet & set,IVi
 
 
 }
+
 
 
 int main(int argc,char ** argv)
@@ -694,6 +735,27 @@ int main(int argc,char ** argv)
 		availableDeviceMemory = a.get<size_t>("dmem");
 	}
 	availableHostMemory = a.get<size_t>("hmem");
+
+	auto de = [availableDeviceMemory](const Vector3i & blockSize){
+			int textureUnitCount = 4;
+			const auto maxBytesPerTexUnit = availableDeviceMemory * 3 / 4 / textureUnitCount;
+			int d = 0;
+			while ( ++d ) {
+				const auto memory = d * d * d * blockSize.Prod();
+				if ( memory >= maxBytesPerTexUnit )
+					break;
+			}
+			d--;
+			//while ( d > 10 )
+			//{
+			//	d /= 2;
+			//	textureUnitCount++;
+			//}
+			return Vec4i{ d, d, d ,textureUnitCount};
+	};
+
+
+
 
 	println("Window Size: [{}, {}]",windowSize.x,windowSize.y);
 	println("Data configuration file: {}",lodsFileName);
@@ -1044,9 +1106,10 @@ int main(int argc,char ** argv)
 				found = true;
 			} else if ( extension == ".lods" ) {
 				//UpdateCPUVolumeData(each);
-				set = glCall_SetupResources(*gl,each,*PluginLoader::GetPluginLoader(),availableHostMemory,availableDeviceMemory);
+				set = glCall_SetupResources(*gl,each,*PluginLoader::GetPluginLoader(),availableHostMemory,de);
 				glCall_ResourcesBinding(set,outofcoreProgram);
 				glCall_ClearObjectSet(set);
+
 				RenderPause = false;
 				found = true;
 			} else if ( extension == ".cam" ) {
@@ -1062,10 +1125,10 @@ int main(int argc,char ** argv)
 		}};
 
 	
-	lodsFileName ="/home/ysl/data/s1.brv";
+	//lodsFileName ="/home/ysl/data/s1.brv";
 	if(lodsFileName.empty() == false){
 		try{
-			set = glCall_SetupResources(*gl,lodsFileName,*PluginLoader::GetPluginLoader(),availableHostMemory,availableDeviceMemory);
+			set = glCall_SetupResources(*gl,lodsFileName,*PluginLoader::GetPluginLoader(),availableHostMemory,de);
 			glCall_ResourcesBinding(set,outofcoreProgram);
 			glCall_ClearObjectSet(set);
 			RenderPause = false; 	// If data is loaded successfully, starts rendering.
