@@ -334,3 +334,4 @@ __pycache__/
 /.vscode
 /out
 /compile_commands.json
+.clangd
