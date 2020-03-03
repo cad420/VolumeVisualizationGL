@@ -6,10 +6,6 @@ layout(location = 2,rgba32f) uniform volatile image2D resutlTexture;
 layout(location = 3) uniform sampler1D texTransfunc;
 layout(location = 4) uniform sampler3D volumeTexture;
 
-//layout(location = 0 ) uniform mat4 ModelMatrix;
-//layout(location = 1 ) uniform mat4 ViewMatrix;
-//layout(location = 2) uniform float step;
-//layout(location = 0) uniform vec3 viewPos;
 
 in vec2 screenCoord;
 out vec4 fragColor;
@@ -41,6 +37,5 @@ void main()
 	}
 	color = color + vec4( bg.rgb, 0.0 ) * ( 1.0 - color.a );
 	color.a = 1.0;
-	//imageStore( exitPosTexture, ivec2( gl_FragCoord ), vec4( samplePoint, 0.0 ) );  // Terminating flag
 	fragColor = color;
 }
