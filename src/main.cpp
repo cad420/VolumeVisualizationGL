@@ -1159,6 +1159,6 @@ int main( int argc, char **argv )
 		gl->Present();
 		gl->DispatchEvent();
 	}
-  std::vector<int> aa;
+
 	return 0;
 }

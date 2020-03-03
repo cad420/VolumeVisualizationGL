@@ -1,4 +1,3 @@
-
 #pragma once
 #include <GL/gl3w.h>
 #include <GLFW/glfw3.h>
@@ -45,7 +44,7 @@ class GLFWImpl:public EventListenerTraits
         glfwSetScrollCallback(window.get(), glfwMouseScrollCallback);
         glfwSetKeyCallback(window.get(), glfwKeyCallback);
         glfwSetDropCallback(window.get(), glfwDropFileCallback);
-
+        return true;
     }
     static KeyButton TranslateKey(int key, int scancode, int mods){
         switch ( key ) 
@@ -104,6 +103,7 @@ class GLFWImpl:public EventListenerTraits
         case GLFW_KEY_KP_9: return Key_9;
         default: std::cout << "Unsupported key\n";
         }
+        return KeyButton::Key_Unknown;
     }
 
     static void glfwCursorPosCallback(GLFWwindow* window, double xpos, double ypos)

@@ -1,5 +1,7 @@
 #pragma once
 #include <functional>
+#include <iostream>
+#include <memory>
 
 
 enum EventAction{
@@ -15,6 +17,7 @@ enum MouseButton
 };
 enum KeyButton
 {
+  Key_Unknown,
 	Key_0,
 	Key_1,
 	Key_2,
@@ -248,7 +251,7 @@ public:
         rhs.m_object = 0;
         return *this;
     }
-    static GLObjectType GetType(){return TypeValue;}
+    static GLObjectType GetType(){return GLObjectType(TypeValue);}
     uint32_t GetGLHandle()const{return m_object;}
     bool Valid()const{return glContext && m_object != 0;}
     operator uint32_t()const{return m_object;}
