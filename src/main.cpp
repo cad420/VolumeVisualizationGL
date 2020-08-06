@@ -5,7 +5,6 @@
 #include <random>
 
 // GL-related
-#include <GLImpl.hpp>
 
 // other dependences
 #include <VMat/geometry.h>
@@ -21,6 +20,7 @@
 #include <VMGraphics/camera.h>
 #include <VMGraphics/interpulator.h>
 
+#include <GLImpl.hpp>
 using namespace vm;
 using namespace std;
 

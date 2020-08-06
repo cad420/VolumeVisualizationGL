@@ -209,7 +209,7 @@ private:
         for ( int i = 0; i < count; ++i )
             extensions.emplace_back( (char *)( glGetStringi( GL_EXTENSIONS, i ) ) );
     }
-    static const GLMAXINTEGER & InitMaxInteger()
+    static void InitMaxInteger()
     {
         GL_EXPR( glGetIntegerv( GL_MAX_VERTEX_ATTRIBS, &maxInteger.MAX_VERTEX_ATTRIBS ) );
         GL_EXPR( glGetIntegerv( GL_MAX_TEXTURE_IMAGE_UNITS, &maxInteger.MAX_TEXTURE_IMAGE_UNITE ) );
