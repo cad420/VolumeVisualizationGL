@@ -375,7 +375,7 @@ vector<Ref<Block3DCache>> SetupVolumeData(
 				exit( -1 );
 			}
 			p->Open( fileNames[ i ] );
-			volumeData[ i ] = VM_NEW<Block3DCache>( p, [&availableHostMemoryHint]( I3DBlockFilePluginInterface *p ) {
+			volumeData[ i ] = VM_NEW<Block3DCache>( p, [&availableHostMemoryHint]( I3DBlockDataInterface *p ) {
 				// this a
 				const auto bytes = p->GetDataSizeWithoutPadding().Prod();
 				size_t th = 2 * 1024 * 1024 * size_t( 1024 );  // 2GB as default
