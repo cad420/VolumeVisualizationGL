@@ -708,7 +708,7 @@ int main( int argc, char **argv )
 	size_t availableHostMemory = 0;
 	size_t availableDeviceMemory = 0;
 	if ( gpuMem >= 0 ) {
-		availableDeviceMemory = ( std::min )( size_t( gpuMem ), a.get<size_t>( "dmem" ) );
+		availableDeviceMemory = ( std::min )( size_t( gpuMem ), a.get<size_t>( "dmem" ) * 1024 * 1024 );
 	} else {
 		println( "Your OpenGL driver does not support extension of querying device memory." );
 		availableDeviceMemory = a.get<size_t>( "dmem" );
