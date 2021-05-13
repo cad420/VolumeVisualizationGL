@@ -13,3 +13,6 @@ else()
 target_link_libraries(volvis glfw vmcore dl)
 endif()
 target_include_directories(volvis PRIVATE "../include" "../gl3w" ${glfw_INCLUDE_DIRS})
+
+install(TARGETS volvis LIBRARY DESTINATION "lib" RUNTIME DESTINATION "bin" ARCHIVE DESTINATION "lib")
+install(TARGETS vmcore LIBRARY DESTINATION "lib" RUNTIME DESTINATION "bin" ARCHIVE DESTINATION "lib")
