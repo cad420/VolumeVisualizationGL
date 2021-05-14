@@ -1107,7 +1107,7 @@ int main( int argc, char **argv )
 	/*Configuration rendering state*/
 	const float zeroRGBA[] = { 0.f, 0.f, 0.f, 0.f };
 	GL_EXPR( glBlendFuncSeparate( GL_ONE, GL_ONE, GL_ONE, GL_ONE ) );  // Just add dst to src : (srcRBG * 1 + dstRGB * 1,srcAlpha * 1 + dstRGB * 1), so the backround color must be cleared as 0
-	GL_EXPR( glFrontFace( GL_CW ) );
+	GL_EXPR( glFrontFace( GL_CCW ) );
 	const GLenum drawBuffers[ 2 ] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
 	const GLenum allDrawBuffers[ 3 ] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
 

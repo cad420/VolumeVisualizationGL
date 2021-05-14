@@ -5,6 +5,8 @@ aux_source_directory(. SRC)
 
 find_package(glfw3 CONFIG REQUIRED)
 
+add_subdirectory(plugins)
+
 add_executable(volvis)
 target_sources(volvis PRIVATE "../gl3w/GL/gl3w.c" ${SRC})
 if(WIN32)
