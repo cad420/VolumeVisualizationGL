@@ -13,5 +13,5 @@ endif()
 
 include(scripts/external.cmake)
 
-vm_external_module(GIT_REPOSITORY https://github.com/cad420/VMCore.git GIT_TAG stable)
+vm_external_module(GIT_REPOSITORY https://github.com/cad420/VMCore.git GIT_TAG master)
 add_subdirectory(src)
