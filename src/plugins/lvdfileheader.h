@@ -46,7 +46,7 @@
 
 namespace vm
 {
-class LVDHeader
+class LVDFileHeader
 {
 	std::unique_ptr<unsigned char[]> buf;
 	static constexpr int BufSize = 64;
@@ -59,7 +59,7 @@ public:
 	uint32_t originalDataDim[ 3 ];
 
 public:
-	LVDHeader();
+	LVDFileHeader();
 	int HeaderSize() const;
 	void Decode( unsigned char *buf );
 	unsigned char *Encode();

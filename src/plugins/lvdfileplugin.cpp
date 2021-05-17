@@ -7,7 +7,12 @@ inline LVDFilePlugin::LVDFilePlugin( ::vm::IRefCnt *cnt ) :
 }
 
 bool LVDFilePlugin::Create( const Block3DDataFileDesc *desc ){
-	return false;
+	lvdReader = std::make_unique<LVDFile>(
+		desc->FileName,
+		desc->BlockSideInLog,
+		vm::Vec3i(desc->DataSize[0],desc->DataSize[1],desc->DataSize[2]),
+		desc->Padding);
+    return lvdReader != nullptr;
 }
 inline void LVDFilePlugin::Open( const std::string &fileName )
 {
@@ -26,9 +31,14 @@ void LVDFilePlugin::Flush()
 }
 void LVDFilePlugin::Write( const void *page, size_t pageID, bool flush )
 {
+	lvdReader->WriteBlock((const char*)page,pageID,0);
+	if(flush){
+		lvdReader->Flush(pageID,0);
+	}
 }
 void LVDFilePlugin::Flush( size_t pageID )
 {
+	lvdReader->Flush(pageID,0);
 }
 }  // namespace vm
 VM_REGISTER_PLUGIN_FACTORY_IMPL( LVDFilePluginFactory )

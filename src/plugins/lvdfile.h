@@ -21,7 +21,7 @@ namespace vm
 class LVDFile
 {
 	std::string fileName;
-	LVDHeader header;
+	LVDFileHeader header;
 	//AbstraFileMap* lvdIO;
 	unsigned char *lvdPtr;
 	vm::Size3 vSize;
@@ -46,7 +46,7 @@ class LVDFile
 	};
 
 	void InitLVDIO();
-	void InitInfoByHeader(const LVDHeader & header);
+	void InitInfoByHeader(const LVDFileHeader & header);
 
 public:
 	explicit LVDFile( const std::string &fileName );
@@ -69,7 +69,7 @@ public:
 	bool Flush();
 	void Close();
 	unsigned char *ReadBlock( int blockId, int lod = 0 );
-	const LVDHeader &GetHeader() const { return header; }
+	const LVDFileHeader &GetHeader() const { return header; }
 	~LVDFile();
 
 private:

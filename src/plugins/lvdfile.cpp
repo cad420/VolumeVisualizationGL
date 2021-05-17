@@ -19,7 +19,7 @@ void LVDFile::InitLVDIO()
 		throw std::runtime_error( "can not load ioplugin" );
 }
 
-void LVDFile::InitInfoByHeader(const LVDHeader & header){
+void LVDFile::InitInfoByHeader(const LVDFileHeader & header){
 	int vx = header.dataDim[ 0 ];
 	int vy = header.dataDim[ 1 ];
 	int vz = header.dataDim[ 2 ];
