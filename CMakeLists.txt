@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
 project(VolumeVisualizationGL)
 
+
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
@@ -13,5 +14,9 @@ endif()
 
 include(scripts/external.cmake)
 
-vm_external_module(GIT_REPOSITORY https://github.com/cad420/VMCore.git GIT_TAG master)
+vm_external_module(GIT_REPOSITORY https://github.com/cad420/VMCore.git GIT_TAG ysldev)
 add_subdirectory(src)
+
+if(BUILD_TEST)
+add_subdirectory(test)
+endif()
