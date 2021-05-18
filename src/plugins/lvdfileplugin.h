@@ -15,6 +15,7 @@ public:
 	LVDFilePlugin( ::vm::IRefCnt *cnt );
 	void Open( const std::string &fileName ) override;
 	bool Create( const Block3DDataFileDesc *desc ) override;
+	void Close() override;
 	const void *GetPage( size_t pageID ) override { return lvdReader->ReadBlock( pageID ); }
 	size_t GetPageSize() const override { return lvdReader->BlockSize(); }
 	size_t GetPhysicalPageCount() const override { return lvdReader->BlockCount(); }

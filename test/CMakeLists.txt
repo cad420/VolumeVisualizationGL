@@ -6,7 +6,7 @@ find_package(GTest CONFIG REQUIRED)
 add_executable(test_lvdfile)
 target_sources(test_lvdfile PRIVATE "test_lvdwr.cpp")
 target_link_libraries(test_lvdfile vmcore lvdfilereader)
-target_link_libraries(test_lvdfile GTest::gtest_main GTest::gtest GTest::gmock GTest::gmock_main lvdfilereader)
+target_link_libraries(test_lvdfile GTest::gtest_main GTest::gtest GTest::gmock GTest::gmock_main)
 target_include_directories(test_lvdfile PRIVATE "../src/plugins")
 
 include(GoogleTest)

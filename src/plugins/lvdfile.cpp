@@ -144,9 +144,12 @@ LVDFile::LVDFile( const std::string & fileName,int blockSideInLog, const Vec3i &
 	}
 	const auto blockSide = (1ULL << blockSideInLog);
 	auto f = [ &blockSide, &padding ]( int x ) { return vm::RoundUpDivide(x,blockSide - 2ULL * padding)*blockSide; };
-	header.dataDim[ 0 ] = f( dataSize.x );
-	header.dataDim[ 1 ] = f( dataSize.y );
-	header.dataDim[ 2 ] = f( dataSize.z );
+	const size_t dataX = f( dataSize.x );
+	const size_t dataY = f( dataSize.y );
+	const size_t dataZ = f( dataSize.z );
+	header.dataDim[ 0 ] = dataX;
+	header.dataDim[ 1 ] = dataY;
+	header.dataDim[ 2 ] = dataZ;
 	header.originalDataDim[ 0 ] = dataSize.x;
 	header.originalDataDim[ 1 ] = dataSize.y;
 	header.originalDataDim[ 2 ] = dataSize.z;
@@ -157,7 +160,7 @@ LVDFile::LVDFile( const std::string & fileName,int blockSideInLog, const Vec3i &
 
 	InitLVDIO();
 
-	const auto fileSize = dataSize.Prod() + LVD_HEADER_SIZE;
+	const auto fileSize = dataX * dataY * dataZ + LVD_HEADER_SIZE;
 
 	lvdIO->Open( fileName.c_str(), fileSize, FileAccess::ReadWrite, MapAccess::ReadWrite );
 	lvdPtr = lvdIO->MemoryMap( 0, fileSize );

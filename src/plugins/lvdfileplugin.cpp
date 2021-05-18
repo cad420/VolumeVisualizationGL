@@ -14,6 +14,10 @@ bool LVDFilePlugin::Create( const Block3DDataFileDesc *desc ){
 		desc->Padding);
     return lvdReader != nullptr;
 }
+void LVDFilePlugin::Close()
+{
+	lvdReader = nullptr;
+}
 inline void LVDFilePlugin::Open( const std::string &fileName )
 {
 	lvdReader = std::make_unique<LVDFile>( fileName );
