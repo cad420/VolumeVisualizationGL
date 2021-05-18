@@ -21,6 +21,7 @@
 #include <VMGraphics/interpulator.h>
 
 #include <GLImpl.hpp>
+#include <jsondef.hpp>
 using namespace vm;
 using namespace std;
 
@@ -37,12 +38,6 @@ Bound3f bound( { 0, 0, 0 }, { 1, 1, 1 } );
 Point3f CubeVertices[ 8 ];
 Point3f CubeTexCoords[ 8 ];
 
-struct LVDJSONStruct : json::Serializable<LVDJSONStruct>
-{
-	VM_JSON_FIELD( std::vector<std::string>, fileNames );
-	VM_JSON_FIELD( float, samplingRate );
-	VM_JSON_FIELD( std::vector<float>, spacing );
-};
 
 using DeviceMemoryEvalutor = std::function<Vector4i( const Vector3i & )>;
 
